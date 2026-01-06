@@ -122,6 +122,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.password_input = QtWidgets.QLineEdit()
         self.password_input.setEchoMode(QtWidgets.QLineEdit.Password)
         self.chk_show_password = QtWidgets.QCheckBox("显示")
+        self.archive_name_input = QtWidgets.QLineEdit()
+        self.archive_name_input.setPlaceholderText("可选，例如 2025-08__素材.7z")
         self.chk_rr = QtWidgets.QCheckBox("生成 PAR2 冗余文件 (5%)")
         self.chk_rr.setChecked(True)
 
@@ -133,10 +135,19 @@ class MainWindow(QtWidgets.QMainWindow):
         encrypt_layout.addWidget(QtWidgets.QLabel("密码"), 0, 0)
         encrypt_layout.addWidget(self.password_input, 0, 1)
         encrypt_layout.addWidget(self.chk_show_password, 0, 2)
-        encrypt_layout.addWidget(self.chk_rr, 1, 1)
-        encrypt_layout.addWidget(QtWidgets.QLabel("7z 路径"), 2, 0)
-        encrypt_layout.addWidget(self.seven_zip_edit, 2, 1)
-        encrypt_layout.addWidget(self.btn_browse_7z, 2, 2)
+        encrypt_layout.addWidget(QtWidgets.QLabel("归档文件名"), 1, 0)
+        encrypt_layout.addWidget(self.archive_name_input, 1, 1, 1, 2)
+        encrypt_layout.addWidget(self.chk_rr, 2, 1)
+        encrypt_layout.addWidget(QtWidgets.QLabel("7z 路径"), 3, 0)
+        encrypt_layout.addWidget(self.seven_zip_edit, 3, 1)
+        encrypt_layout.addWidget(self.btn_browse_7z, 3, 2)
+
+        # README
+        self.readme_group = QtWidgets.QGroupBox("README")
+        readme_layout = QtWidgets.QVBoxLayout(self.readme_group)
+        self.readme_input = QtWidgets.QPlainTextEdit()
+        self.readme_input.setPlaceholderText("可选：写入说明到目标目录的 README.txt")
+        readme_layout.addWidget(self.readme_input)
 
         # 操作
         actions_group = QtWidgets.QGroupBox("操作")
@@ -164,6 +175,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(source_group)
         layout.addWidget(options_group)
         layout.addWidget(self.encrypt_group)
+        layout.addWidget(self.readme_group)
         layout.addWidget(actions_group)
         layout.addWidget(progress_group)
 
@@ -246,6 +258,8 @@ class MainWindow(QtWidgets.QMainWindow):
         mode = MODE_PLAIN if self.rb_plain.isChecked() else MODE_ENCRYPTED
         password = self.password_input.text()
         rr_enabled = self.chk_rr.isChecked()
+        archive_name = self.archive_name_input.text().strip()
+        readme_text = self.readme_input.toPlainText()
 
         if mode == MODE_ENCRYPTED:
             if not password:
@@ -265,6 +279,8 @@ class MainWindow(QtWidgets.QMainWindow):
             rr_enabled=rr_enabled,
             seven_zip=self.seven_zip_path,
             job_id=job_id,
+            archive_name=archive_name,
+            readme_text=readme_text,
         )
 
     def _on_preview(self):

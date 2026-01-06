@@ -22,3 +22,5 @@ class BackupJob:
     rr_enabled: bool
     seven_zip: str
     job_id: str
+    archive_name: str = ""
+    readme_text: str = ""

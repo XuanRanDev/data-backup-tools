@@ -14,9 +14,11 @@ from core.config import (
     ARCHIVE_NAME_PATTERN,
     BACKUP_ROOT_NAME,
     CHUNK_SIZE,
+    CHECKSUM_DIRNAME,
     INDEX_DIRNAME,
     LOG_FIELDS,
     LOG_FILENAME,
+    PAR2_DIRNAME,
     PAR2_EXE_NAME,
     SHA256_EXT,
     TIME_BASIS_CTIME,
@@ -68,6 +70,18 @@ def ensure_index_dir(backup_root: Path) -> Path:
     index_dir = backup_root / INDEX_DIRNAME
     index_dir.mkdir(parents=True, exist_ok=True)
     return index_dir
+
+
+def ensure_checksum_dir(base_dir: Path) -> Path:
+    checksum_dir = base_dir / CHECKSUM_DIRNAME
+    checksum_dir.mkdir(parents=True, exist_ok=True)
+    return checksum_dir
+
+
+def ensure_par2_dir(base_dir: Path) -> Path:
+    par2_dir = base_dir / PAR2_DIRNAME
+    par2_dir.mkdir(parents=True, exist_ok=True)
+    return par2_dir
 
 
 def resolve_collision(path: Path) -> Path:
@@ -209,6 +223,15 @@ def write_sha256_file(archive_path: Path, hash_hex: str):
     return sha_path
 
 
+def write_sha256_file_to_dir(archive_path: Path, hash_hex: str, checksum_dir: Path):
+    checksum_dir.mkdir(parents=True, exist_ok=True)
+    sha_name = archive_path.name + SHA256_EXT
+    sha_path = checksum_dir / sha_name
+    with sha_path.open("w", encoding="utf-8") as f:
+        f.write(f"{hash_hex}  {archive_path.name}\n")
+    return sha_path
+
+
 def copy_file_with_progress(src: Path, dst: Path, progress_cb=None):
     dst.parent.mkdir(parents=True, exist_ok=True)
     with src.open("rb") as fsrc, dst.open("wb") as fdst:
@@ -226,6 +249,15 @@ def build_archive_name(yyyy: int, mm: int, source_type: str, job_id: str):
     safe_type = "".join(c for c in source_type if c.isalnum() or c in "-_ ").strip()
     safe_type = safe_type.replace(" ", "_") or "其他"
     return ARCHIVE_NAME_PATTERN.format(yyyy=yyyy, mm=mm, source_type=safe_type, job_id=job_id)
+
+
+def sanitize_archive_name(raw_name: str):
+    raw = (raw_name or "").strip()
+    if not raw:
+        return ""
+    invalid = '<>:"/\\|?*'
+    cleaned = "".join("_" if c in invalid else c for c in raw).strip()
+    return cleaned
 
 
 def create_7z_archive(
@@ -298,6 +330,16 @@ def create_par2_redundancy(par2_exe: str, archive_path: Path, redundancy_percent
         raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "par2 执行失败")
 
 
+def move_par2_files(archive_path: Path, par2_dir: Path):
+    par2_dir.mkdir(parents=True, exist_ok=True)
+    pattern = f"{archive_path.name}*.par2"
+    for par2_file in archive_path.parent.glob(pattern):
+        target = par2_dir / par2_file.name
+        if target.exists():
+            target = resolve_collision(target)
+        par2_file.replace(target)
+
+
 def read_sha256_file(sha_path: Path):
     try:
         content = sha_path.read_text(encoding="utf-8").strip()
@@ -306,3 +348,17 @@ def read_sha256_file(sha_path: Path):
         return content.split()[0]
     except Exception:
         return ""
+
+
+def write_readme(target_dir: Path, text: str, job_id: str, timestamp: str):
+    content = (text or "").strip()
+    if not content:
+        return
+    target_dir.mkdir(parents=True, exist_ok=True)
+    readme_path = target_dir / "README.txt"
+    header = f"[{timestamp}] job_id={job_id}"
+    with readme_path.open("a", encoding="utf-8") as f:
+        if readme_path.stat().st_size > 0:
+            f.write("\n\n")
+        f.write(header + "\n")
+        f.write(content + "\n")

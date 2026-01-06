@@ -4,22 +4,35 @@ from pathlib import Path
 
 from PySide6 import QtCore
 
-from core.config import BACKUP_ROOT_NAME, ENCRYPTED_DIRNAME, MODE_ENCRYPTED, MODE_PLAIN, SHA256_EXT
+from core.config import (
+    BACKUP_ROOT_NAME,
+    CHECKSUM_DIRNAME,
+    ENCRYPTED_DIRNAME,
+    MODE_ENCRYPTED,
+    MODE_PLAIN,
+    PAR2_DIRNAME,
+    SHA256_EXT,
+)
 from core.models import BackupJob
 from core.utils import (
     append_log_row,
     compute_sha256,
     create_7z_archive,
     create_par2_redundancy,
+    ensure_checksum_dir,
     ensure_backup_root,
+    ensure_par2_dir,
     find_par2_exe,
     group_items_by_month,
     collect_source_items,
     read_sha256_file,
     resolve_collision,
-    write_sha256_file,
+    sanitize_archive_name,
+    write_sha256_file_to_dir,
     build_archive_name,
     copy_file_with_progress,
+    move_par2_files,
+    write_readme,
 )
 
 
@@ -57,6 +70,7 @@ class BackupWorker(QtCore.QObject):
 
                 if job.mode == MODE_PLAIN:
                     target_dir = backup_root / f"{yyyy}" / f"{mm:02d}" / job.source_type
+                    write_readme(target_dir, job.readme_text, job_id, start_ts)
                     for it in group_items:
                         dest = target_dir / it.rel_path
                         dest = resolve_collision(dest)
@@ -89,8 +103,15 @@ class BackupWorker(QtCore.QObject):
                 else:
                     enc_dir = backup_root / f"{yyyy}" / f"{mm:02d}" / ENCRYPTED_DIRNAME
                     enc_dir.mkdir(parents=True, exist_ok=True)
-                    archive_name = build_archive_name(yyyy, mm, job.source_type, job_id)
+                    raw_name = sanitize_archive_name(job.archive_name)
+                    if raw_name:
+                        if not raw_name.lower().endswith(".7z"):
+                            raw_name += ".7z"
+                        archive_name = raw_name
+                    else:
+                        archive_name = build_archive_name(yyyy, mm, job.source_type, job_id)
                     archive_path = resolve_collision(enc_dir / archive_name)
+                    write_readme(enc_dir, job.readme_text, job_id, start_ts)
 
                     self.status.emit(f"正在归档 {yyyy}-{mm:02d}")
                     create_7z_archive(
@@ -106,11 +127,14 @@ class BackupWorker(QtCore.QObject):
 
                     self.status.emit("正在计算 SHA256")
                     hash_hex = compute_sha256(archive_path)
-                    write_sha256_file(archive_path, hash_hex)
+                    checksum_dir = ensure_checksum_dir(enc_dir)
+                    write_sha256_file_to_dir(archive_path, hash_hex, checksum_dir)
 
                     if job.rr_enabled:
                         self.status.emit("正在生成 PAR2 冗余文件")
                         create_par2_redundancy(par2_exe, archive_path, 5)
+                        par2_dir = ensure_par2_dir(enc_dir)
+                        move_par2_files(archive_path, par2_dir)
 
                     append_log_row(
                         backup_root,
@@ -158,7 +182,10 @@ class VerifyWorker(QtCore.QObject):
 
             ok_count = 0
             for idx, arch in enumerate(archives, start=1):
-                sha_path = arch.with_suffix(arch.suffix + SHA256_EXT)
+                checksum_dir = arch.parent / CHECKSUM_DIRNAME
+                sha_path = checksum_dir / (arch.name + SHA256_EXT)
+                if not sha_path.exists():
+                    sha_path = arch.with_suffix(arch.suffix + SHA256_EXT)
                 expected = read_sha256_file(sha_path) if sha_path.exists() else ""
                 if not expected:
                     self.progress.emit(idx, total, f"缺少 sha256: {arch.name}")
