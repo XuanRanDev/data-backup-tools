@@ -350,13 +350,25 @@ def read_sha256_file(sha_path: Path):
         return ""
 
 
-def write_readme(target_dir: Path, text: str, job_id: str, timestamp: str):
+def write_readme(
+    target_dir: Path,
+    text: str,
+    job_id: str,
+    timestamp: str,
+    archive_name: str,
+    source_type: str,
+    mode: str,
+):
     content = (text or "").strip()
     if not content:
         return
     target_dir.mkdir(parents=True, exist_ok=True)
     readme_path = target_dir / "README.txt"
-    header = f"[{timestamp}] job_id={job_id}"
+    archive_part = archive_name or "-"
+    header = (
+        f"[{timestamp}] job_id={job_id} mode={mode} source_type={source_type} "
+        f"archive={archive_part}"
+    )
     with readme_path.open("a", encoding="utf-8") as f:
         if readme_path.stat().st_size > 0:
             f.write("\n\n")

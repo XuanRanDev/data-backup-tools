@@ -70,7 +70,15 @@ class BackupWorker(QtCore.QObject):
 
                 if job.mode == MODE_PLAIN:
                     target_dir = backup_root / f"{yyyy}" / f"{mm:02d}" / job.source_type
-                    write_readme(target_dir, job.readme_text, job_id, start_ts)
+                    write_readme(
+                        target_dir,
+                        job.readme_text,
+                        job_id,
+                        start_ts,
+                        "",
+                        job.source_type,
+                        MODE_PLAIN,
+                    )
                     for it in group_items:
                         dest = target_dir / it.rel_path
                         dest = resolve_collision(dest)
@@ -111,7 +119,15 @@ class BackupWorker(QtCore.QObject):
                     else:
                         archive_name = build_archive_name(yyyy, mm, job.source_type, job_id)
                     archive_path = resolve_collision(enc_dir / archive_name)
-                    write_readme(enc_dir, job.readme_text, job_id, start_ts)
+                    write_readme(
+                        enc_dir,
+                        job.readme_text,
+                        job_id,
+                        start_ts,
+                        archive_path.name,
+                        job.source_type,
+                        MODE_ENCRYPTED,
+                    )
 
                     self.status.emit(f"正在归档 {yyyy}-{mm:02d}")
                     create_7z_archive(
