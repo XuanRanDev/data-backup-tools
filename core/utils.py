@@ -97,6 +97,15 @@ def resolve_collision(path: Path) -> Path:
     raise RuntimeError(f"无法解决重名冲突: {path}")
 
 
+def is_same_file(src: Path, dst: Path) -> bool:
+    try:
+        src_stat = src.stat()
+        dst_stat = dst.stat()
+    except Exception:
+        return False
+    return src_stat.st_size == dst_stat.st_size and int(src_stat.st_mtime) == int(dst_stat.st_mtime)
+
+
 def format_size(num_bytes: int) -> str:
     size = float(num_bytes)
     for unit in ["B", "KB", "MB", "GB", "TB"]:

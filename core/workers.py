@@ -33,6 +33,7 @@ from core.utils import (
     copy_file_with_progress,
     move_par2_files,
     write_readme,
+    is_same_file,
 )
 
 
@@ -64,9 +65,9 @@ class BackupWorker(QtCore.QObject):
             start_ts = dt.datetime.now().isoformat(timespec="seconds")
 
             for (yyyy, mm), group_items in sorted(groups.items()):
-                notes = ""
+                notes_parts = []
                 if notes_count.get((yyyy, mm)):
-                    notes = f"exif_fallback_count={notes_count[(yyyy, mm)]}"
+                    notes_parts.append(f"exif_fallback_count={notes_count[(yyyy, mm)]}")
 
                 if job.mode == MODE_PLAIN:
                     target_dir = backup_root / f"{yyyy}" / f"{mm:02d}" / job.source_type
@@ -79,9 +80,16 @@ class BackupWorker(QtCore.QObject):
                         job.source_type,
                         MODE_PLAIN,
                     )
+                    copied_bytes = 0
+                    skipped_count = 0
                     for it in group_items:
-                        dest = target_dir / it.rel_path
-                        dest = resolve_collision(dest)
+                        base_dest = target_dir / it.rel_path
+                        if base_dest.exists() and is_same_file(it.path, base_dest):
+                            done_bytes += it.size
+                            skipped_count += 1
+                            self.progress.emit(done_bytes, total_bytes, f"跳过已备份: {it.path}")
+                            continue
+                        dest = resolve_collision(base_dest) if base_dest.exists() else base_dest
 
                         def on_progress(chunk):
                             nonlocal done_bytes
@@ -89,8 +97,12 @@ class BackupWorker(QtCore.QObject):
                             self.progress.emit(done_bytes, total_bytes, str(it.path))
 
                         copy_file_with_progress(it.path, dest, progress_cb=on_progress)
+                        copied_bytes += it.size
 
-                    size_bytes = sum(it.size for it in group_items)
+                    if skipped_count:
+                        notes_parts.append(f"skip_existing={skipped_count}")
+                    notes = ";".join(notes_parts)
+                    size_bytes = copied_bytes
                     append_log_row(
                         backup_root,
                         {
@@ -109,6 +121,7 @@ class BackupWorker(QtCore.QObject):
                         },
                     )
                 else:
+                    notes = ";".join(notes_parts)
                     enc_dir = backup_root / f"{yyyy}" / f"{mm:02d}" / ENCRYPTED_DIRNAME
                     enc_dir.mkdir(parents=True, exist_ok=True)
                     raw_name = sanitize_archive_name(job.archive_name)
