@@ -220,6 +220,26 @@ class BackupWorker(QtCore.QObject):
                         move_par2_files(archive_path, par2_dir)
                         append_detail_log(log_path, f"PAR2_CREATED\t{archive_path.name}")
 
+                    deleted_count = 0
+                    if job.delete_after_encrypt:
+                        self.status.emit("正在删除源文件")
+                        for it in group_items:
+                            try:
+                                it.path.unlink()
+                                deleted_count += 1
+                                append_detail_log(
+                                    log_path,
+                                    f"DELETE\t{it.path}",
+                                )
+                            except Exception as exc:
+                                append_detail_log(
+                                    log_path,
+                                    f"DELETE_FAILED\t{it.path}\t{exc}",
+                                )
+                        if deleted_count:
+                            notes_parts.append(f"deleted_files={deleted_count}")
+                        notes = ";".join(notes_parts)
+
                     append_log_row(
                         backup_root,
                         {

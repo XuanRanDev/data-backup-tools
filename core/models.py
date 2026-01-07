@@ -20,6 +20,7 @@ class BackupJob:
     mode: str
     password: str
     rr_enabled: bool
+    delete_after_encrypt: bool
     seven_zip: str
     job_id: str
     archive_name: str = ""

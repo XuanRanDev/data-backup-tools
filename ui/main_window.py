@@ -86,6 +86,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.chk_show_password = self.encrypt_section.chk_show_password
         self.archive_name_input = self.encrypt_section.archive_name_input
         self.chk_rr = self.encrypt_section.chk_rr
+        self.chk_delete_after = self.encrypt_section.chk_delete_after
         self.seven_zip_edit = self.encrypt_section.seven_zip_edit
         self.btn_browse_7z = self.encrypt_section.btn_browse_7z
 
@@ -207,6 +208,7 @@ class MainWindow(QtWidgets.QMainWindow):
             mode = MODE_ENCRYPTED
         password = self.password_input.text()
         rr_enabled = self.chk_rr.isChecked()
+        delete_after_encrypt = self.chk_delete_after.isChecked()
         archive_name = self.archive_name_input.text().strip()
         readme_text = self.readme_input.toPlainText()
 
@@ -226,6 +228,7 @@ class MainWindow(QtWidgets.QMainWindow):
             mode=mode,
             password=password,
             rr_enabled=rr_enabled,
+            delete_after_encrypt=delete_after_encrypt,
             seven_zip=self.seven_zip_path,
             job_id=job_id,
             archive_name=archive_name,

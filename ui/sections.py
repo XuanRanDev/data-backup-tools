@@ -91,6 +91,7 @@ class EncryptSection(QtWidgets.QGroupBox):
         self.archive_name_input.setPlaceholderText("可选，例如 2025-08__素材.7z")
         self.chk_rr = QtWidgets.QCheckBox("生成 PAR2 冗余文件 (5%)")
         self.chk_rr.setChecked(True)
+        self.chk_delete_after = QtWidgets.QCheckBox("归档后删除源文件")
 
         self.seven_zip_edit = QtWidgets.QLineEdit()
         self.seven_zip_edit.setReadOnly(True)
@@ -102,6 +103,7 @@ class EncryptSection(QtWidgets.QGroupBox):
         layout.addWidget(QtWidgets.QLabel("归档文件名"), 1, 0)
         layout.addWidget(self.archive_name_input, 1, 1, 1, 2)
         layout.addWidget(self.chk_rr, 2, 1)
+        layout.addWidget(self.chk_delete_after, 2, 2)
         layout.addWidget(QtWidgets.QLabel("7z 路径"), 3, 0)
         layout.addWidget(self.seven_zip_edit, 3, 1)
         layout.addWidget(self.btn_browse_7z, 3, 2)
