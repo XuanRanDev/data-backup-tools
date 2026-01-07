@@ -16,6 +16,8 @@ from core.config import (
 from core.models import BackupJob
 from core.utils import (
     append_log_row,
+    append_detail_log,
+    build_detail_log_path,
     compute_sha256,
     create_7z_archive,
     create_par2_redundancy,
@@ -34,6 +36,7 @@ from core.utils import (
     move_par2_files,
     write_readme,
     is_same_file,
+    write_detail_log_header,
 )
 
 
@@ -48,6 +51,7 @@ class BackupWorker(QtCore.QObject):
 
     def run(self):
         job = self.job
+        log_path = None
         try:
             items = collect_source_items(job.source_paths)
             if not items:
@@ -62,12 +66,22 @@ class BackupWorker(QtCore.QObject):
 
             backup_root = ensure_backup_root(job.target_drive)
             job_id = job.job_id
-            start_ts = dt.datetime.now().isoformat(timespec="seconds")
+            start_dt = dt.datetime.now()
+            start_ts = start_dt.isoformat(timespec="seconds")
+            log_path = build_detail_log_path(backup_root, job_id, start_dt)
+            write_detail_log_header(log_path, job, start_dt, len(items), total_bytes)
+            total_copied = 0
+            total_skipped = 0
+            total_archived = 0
 
             for (yyyy, mm), group_items in sorted(groups.items()):
                 notes_parts = []
                 if notes_count.get((yyyy, mm)):
                     notes_parts.append(f"exif_fallback_count={notes_count[(yyyy, mm)]}")
+                append_detail_log(
+                    log_path,
+                    f"[{start_ts}] GROUP {yyyy}-{mm:02d} items={len(group_items)}",
+                )
 
                 if job.mode == MODE_PLAIN:
                     target_dir = backup_root / f"{yyyy}" / f"{mm:02d}" / job.source_type
@@ -82,12 +96,18 @@ class BackupWorker(QtCore.QObject):
                     )
                     copied_bytes = 0
                     skipped_count = 0
+                    copied_count = 0
                     for it in group_items:
                         base_dest = target_dir / it.rel_path
                         if base_dest.exists() and is_same_file(it.path, base_dest):
                             done_bytes += it.size
                             skipped_count += 1
+                            total_skipped += 1
                             self.progress.emit(done_bytes, total_bytes, f"跳过已备份: {it.path}")
+                            append_detail_log(
+                                log_path,
+                                f"SKIP_EXISTING\t{it.path}",
+                            )
                             continue
                         dest = resolve_collision(base_dest) if base_dest.exists() else base_dest
 
@@ -98,6 +118,12 @@ class BackupWorker(QtCore.QObject):
 
                         copy_file_with_progress(it.path, dest, progress_cb=on_progress)
                         copied_bytes += it.size
+                        copied_count += 1
+                        total_copied += 1
+                        append_detail_log(
+                            log_path,
+                            f"COPY\t{it.path}\t=>\t{dest}",
+                        )
 
                     if skipped_count:
                         notes_parts.append(f"skip_existing={skipped_count}")
@@ -120,6 +146,10 @@ class BackupWorker(QtCore.QObject):
                             "notes": notes,
                         },
                     )
+                    append_detail_log(
+                        log_path,
+                        f"GROUP_DONE {yyyy}-{mm:02d} copied_files={copied_count} copied_bytes={copied_bytes} skipped_files={skipped_count}",
+                    )
                 else:
                     notes = ";".join(notes_parts)
                     enc_dir = backup_root / f"{yyyy}" / f"{mm:02d}" / ENCRYPTED_DIRNAME
@@ -141,6 +171,11 @@ class BackupWorker(QtCore.QObject):
                         job.source_type,
                         MODE_ENCRYPTED,
                     )
+                    for it in group_items:
+                        append_detail_log(
+                            log_path,
+                            f"ARCHIVE_ADD\t{it.path}",
+                        )
 
                     self.status.emit(f"正在归档 {yyyy}-{mm:02d}")
                     create_7z_archive(
@@ -164,6 +199,7 @@ class BackupWorker(QtCore.QObject):
                         create_par2_redundancy(par2_exe, archive_path, 5)
                         par2_dir = ensure_par2_dir(enc_dir)
                         move_par2_files(archive_path, par2_dir)
+                        append_detail_log(log_path, f"PAR2_CREATED\t{archive_path.name}")
 
                     append_log_row(
                         backup_root,
@@ -182,9 +218,26 @@ class BackupWorker(QtCore.QObject):
                             "notes": notes,
                         },
                     )
+                    total_archived += len(group_items)
+                    append_detail_log(
+                        log_path,
+                        f"ARCHIVE_DONE {archive_path.name} size_bytes={archive_path.stat().st_size} sha256={hash_hex}",
+                    )
+                    append_detail_log(
+                        log_path,
+                        f"GROUP_DONE {yyyy}-{mm:02d} archived_items={len(group_items)}",
+                    )
 
+            end_ts = dt.datetime.now().isoformat(timespec="seconds")
+            append_detail_log(
+                log_path,
+                f"[{end_ts}] END status=success copied={total_copied} skipped={total_skipped} archived_items={total_archived}",
+            )
             self.finished.emit(True, "备份完成。")
         except Exception as exc:
+            if log_path:
+                err_ts = dt.datetime.now().isoformat(timespec="seconds")
+                append_detail_log(log_path, f"[{err_ts}] END status=failed error={exc}")
             self.finished.emit(False, str(exc))
 
 

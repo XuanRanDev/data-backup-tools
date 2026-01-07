@@ -15,6 +15,7 @@ from core.config import (
     BACKUP_ROOT_NAME,
     CHUNK_SIZE,
     CHECKSUM_DIRNAME,
+    DETAIL_LOG_FILENAME,
     INDEX_DIRNAME,
     LOG_FIELDS,
     LOG_FILENAME,
@@ -207,6 +208,45 @@ def append_log_row(backup_root: Path, row: dict):
         if is_new:
             writer.writeheader()
         writer.writerow(row)
+
+
+def build_detail_log_path(backup_root: Path, job_id: str, start_dt: dt.datetime) -> Path:
+    base = Path(DETAIL_LOG_FILENAME)
+    stem = base.stem or "BACKUP_DETAIL"
+    suffix = base.suffix or ".log"
+    ts = start_dt.strftime("%Y%m%d_%H%M%S")
+    name = f"{stem}_{ts}_{job_id}{suffix}"
+    return backup_root / "Logs" / name
+
+
+def append_detail_log(log_path: Path, line: str):
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(line.rstrip("\n") + "\n")
+
+
+def write_detail_log_header(
+    log_path: Path,
+    job,
+    start_dt: dt.datetime,
+    total_files: int,
+    total_bytes: int,
+):
+    start_ts = start_dt.isoformat(timespec="seconds")
+    header_lines = [
+        f"[{start_ts}] START",
+        f"job_id={job.job_id}",
+        f"source_paths={';'.join(job.source_paths)}",
+        f"target_drive={job.target_drive}",
+        f"source_type={job.source_type}",
+        f"time_basis={job.time_basis}",
+        f"mode={job.mode}",
+        f"total_files={total_files}",
+        f"total_bytes={total_bytes}",
+        "",
+    ]
+    for line in header_lines:
+        append_detail_log(log_path, line)
 
 
 def compute_sha256(path: Path, progress_cb=None):
