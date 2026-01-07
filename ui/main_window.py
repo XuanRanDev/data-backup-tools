@@ -102,12 +102,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.source_list.paths_dropped.connect(self.add_source_paths)
         self.encrypt_section.set_seven_zip_path(self.seven_zip_path)
 
-        layout.addWidget(self.source_section)
-        layout.addWidget(self.options_section)
-        layout.addWidget(self.encrypt_section)
-        layout.addWidget(self.readme_section)
-        layout.addWidget(self.actions_section)
-        layout.addWidget(self.progress_section)
+        body = QtWidgets.QHBoxLayout()
+        left_col = QtWidgets.QVBoxLayout()
+        right_col = QtWidgets.QVBoxLayout()
+
+        left_col.addWidget(self.source_section)
+        left_col.addWidget(self.readme_section)
+        left_col.addStretch(1)
+
+        right_col.addWidget(self.options_section)
+        right_col.addWidget(self.encrypt_section)
+        right_col.addWidget(self.actions_section)
+        right_col.addWidget(self.progress_section)
+        right_col.addStretch(1)
+
+        body.addLayout(left_col, 3)
+        body.addLayout(right_col, 2)
+        layout.addLayout(body)
 
         # 信号
         self.btn_add_files.clicked.connect(self._on_add_files)
