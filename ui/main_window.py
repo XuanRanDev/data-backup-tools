@@ -8,7 +8,6 @@ from PySide6 import QtCore, QtWidgets
 
 from core.config import (
     BACKUP_ROOT_NAME,
-    DEFAULT_SOURCE_TYPES,
     INDEX_DIRNAME,
     LOG_FILENAME,
     MODE_ENCRYPTED,
@@ -26,7 +25,15 @@ from core.utils import (
     list_windows_drives,
 )
 from core.workers import BackupWorker, VerifyWorker
-from ui.widgets import PathListWidget
+from ui.sections import (
+    ActionsSection,
+    EncryptSection,
+    OptionsSection,
+    ProgressSection,
+    ReadmeSection,
+    SourceSection,
+)
+from ui.style import apply_app_style
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -34,7 +41,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle("离线备份助手")
         self.resize(1000, 700)
-        self._apply_style()
+        apply_app_style(self)
 
         self.seven_zip_path = find_7z_exe()
         self.worker_thread = None
@@ -43,315 +50,64 @@ class MainWindow(QtWidgets.QMainWindow):
         self._refresh_drives()
         self._apply_mode_visibility()
 
-    def _apply_style(self):
-        """Apply app-wide stylesheet."""
-        self.setStyleSheet("""
-            /* 全局设定 */
-            * {
-                font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", sans-serif;
-                font-size: 10pt;
-                outline: none; /* 去掉原本丑陋的虚线框 */
-            }
-
-            /* 主窗口背景 */
-            QMainWindow {
-                background: #fdfdfd;
-            }
-
-            /* 文本标签 */
-            QLabel {
-                color: #333333;
-                font-weight: 500;
-            }
-
-            /* GroupBox 容器 */
-            QGroupBox {
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                margin-top: 24px; /* 为标题留出空间 */
-                background-color: #ffffff;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                padding: 0 5px;
-                color: #555555;
-                font-weight: bold;
-                font-size: 10.5pt;
-                left: 10px; /* 标题稍微右移 */
-            }
-
-            /* 输入框、文本域、下拉框 */
-            QLineEdit, QPlainTextEdit, QComboBox, QDateEdit, QSpinBox {
-                background: #ffffff;
-                border: 1px solid #d1d5db; /* 浅灰边框 */
-                border-radius: 6px;
-                padding: 5px 10px;
-                color: #1f2937;
-                selection-background-color: #3b82f6; /* 选中色：蓝色 */
-                selection-color: #ffffff;
-            }
-
-            /* 输入框悬停与聚焦状态 - 增加交互感 */
-            QLineEdit:hover, QPlainTextEdit:hover, QComboBox:hover {
-                border: 1px solid #9ca3af;
-            }
-            QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus {
-                border: 1px solid #3b82f6; /* 聚焦变为蓝色 */
-                background: #feffff;
-            }
-
-            /* 下拉框特殊样式 */
-            QComboBox::drop-down {
-                border: none;
-                width: 20px;
-                margin-right: 5px;
-            }
-            QComboBox::down-arrow {
-                /* 你可以使用图片，或者这里简单的用字符/颜色模拟 */
-                image: none;
-                border-left: 2px solid #6b7280;
-                border-bottom: 2px solid #6b7280;
-                width: 6px;
-                height: 6px;
-                transform: rotate(-45deg); /* 简单的箭头模拟 */
-            }
-            QComboBox QAbstractItemView {
-                background: #ffffff;
-                border: 1px solid #e5e7eb;
-                outline: none;
-                padding: 4px;
-            }
-            QComboBox QAbstractItemView::item {
-                padding: 5px;
-                border-radius: 4px;
-            }
-            QComboBox QAbstractItemView::item:selected {
-                background: #eff6ff;
-                color: #1d4ed8;
-            }
-
-            /* 按钮 */
-            QPushButton {
-                background: #3b82f6; /* 鲜艳的蓝 */
-                color: #ffffff;
-                border: 1px solid #2563eb;
-                border-radius: 6px;
-                padding: 6px 16px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background: #2563eb;
-            }
-            QPushButton:pressed {
-                background: #1d4ed8;
-                padding-left: 17px; /* 按下时的微动效 */
-                padding-top: 7px;
-            }
-            QPushButton:disabled {
-                background: #e5e7eb;
-                color: #9ca3af;
-                border: 1px solid #d1d5db;
-            }
-
-            /* 单选框与复选框 */
-            QRadioButton, QCheckBox {
-                spacing: 8px;
-                color: #374151;
-            }
-            QRadioButton::indicator, QCheckBox::indicator {
-                width: 16px;
-                height: 16px;
-            }
-
-            /* 表格 */
-            QTableWidget {
-                background-color: #ffffff;
-                alternate-background-color: #f9fafb; /* 隔行变色 */
-                border: 1px solid #e5e7eb;
-                gridline-color: #f3f4f6;
-                selection-background-color: #eff6ff;
-                selection-color: #1e40af;
-            }
-            QHeaderView::section {
-                background-color: #f3f4f6;
-                padding: 6px;
-                border: none;
-                border-bottom: 1px solid #e5e7eb;
-                font-weight: 600;
-                color: #4b5563;
-            }
-
-            /* 进度条 */
-            QProgressBar {
-                border: none;
-                background: #e5e7eb;
-                border-radius: 4px;
-                text-align: center;
-                color: transparent; /* 隐藏文字，如果需要显示文字删掉这行 */
-                height: 8px;
-            }
-            QProgressBar::chunk {
-                background: #10b981; /* 绿色 */
-                border-radius: 4px;
-            }
-
-            /* 滚动条美化 (重要！原生的太丑) */
-            QScrollBar:vertical {
-                border: none;
-                background: #f3f4f6;
-                width: 10px;
-                margin: 0px 0px 0px 0px;
-            }
-            QScrollBar::handle:vertical {
-                background: #d1d5db;
-                min-height: 20px;
-                border-radius: 5px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #9ca3af;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-        """)
-
     def _build_ui(self):
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
         layout = QtWidgets.QVBoxLayout(central)
 
-        # 源选择
-        source_group = QtWidgets.QGroupBox("源选择")
-        source_layout = QtWidgets.QVBoxLayout(source_group)
-        self.source_list = PathListWidget()
+        self.source_section = SourceSection()
+        self.options_section = OptionsSection()
+        self.encrypt_section = EncryptSection()
+        self.readme_section = ReadmeSection()
+        self.actions_section = ActionsSection()
+        self.progress_section = ProgressSection()
+
+        self.source_list = self.source_section.source_list
+        self.btn_add_files = self.source_section.btn_add_files
+        self.btn_add_folders = self.source_section.btn_add_folders
+        self.btn_remove_selected = self.source_section.btn_remove_selected
+        self.btn_clear = self.source_section.btn_clear
+
+        self.drive_combo = self.options_section.drive_combo
+        self.btn_refresh_drives = self.options_section.btn_refresh_drives
+        self.source_type_combo = self.options_section.source_type_combo
+        self.time_group = self.options_section.time_group
+        self.rb_mtime = self.options_section.rb_mtime
+        self.rb_ctime = self.options_section.rb_ctime
+        self.rb_exif = self.options_section.rb_exif
+        self.mode_group = self.options_section.mode_group
+        self.rb_plain = self.options_section.rb_plain
+        self.rb_encrypted = self.options_section.rb_encrypted
+
+        self.encrypt_group = self.encrypt_section
+        self.password_input = self.encrypt_section.password_input
+        self.chk_show_password = self.encrypt_section.chk_show_password
+        self.archive_name_input = self.encrypt_section.archive_name_input
+        self.chk_rr = self.encrypt_section.chk_rr
+        self.seven_zip_edit = self.encrypt_section.seven_zip_edit
+        self.btn_browse_7z = self.encrypt_section.btn_browse_7z
+
+        self.readme_group = self.readme_section
+        self.readme_input = self.readme_section.readme_input
+
+        self.btn_preview = self.actions_section.btn_preview
+        self.btn_start = self.actions_section.btn_start
+        self.btn_view_log = self.actions_section.btn_view_log
+        self.btn_verify = self.actions_section.btn_verify
+
+        self.progress_bar = self.progress_section.progress_bar
+        self.status_label = self.progress_section.status_label
+        self.eta_label = self.progress_section.eta_label
+
         self.source_list.paths_dropped.connect(self.add_source_paths)
-        source_layout.addWidget(self.source_list)
+        self.encrypt_section.set_seven_zip_path(self.seven_zip_path)
 
-        btn_row = QtWidgets.QHBoxLayout()
-        self.btn_add_files = QtWidgets.QPushButton("添加文件")
-        self.btn_add_folders = QtWidgets.QPushButton("添加文件夹")
-        self.btn_remove_selected = QtWidgets.QPushButton("移除选中")
-        self.btn_clear = QtWidgets.QPushButton("清空")
-        btn_row.addWidget(self.btn_add_files)
-        btn_row.addWidget(self.btn_add_folders)
-        btn_row.addWidget(self.btn_remove_selected)
-        btn_row.addWidget(self.btn_clear)
-        btn_row.addStretch(1)
-        source_layout.addLayout(btn_row)
-
-        # 目标与选项
-        options_group = QtWidgets.QGroupBox("选项")
-        options_layout = QtWidgets.QGridLayout(options_group)
-
-        self.drive_combo = QtWidgets.QComboBox()
-        self.btn_refresh_drives = QtWidgets.QPushButton("刷新")
-        options_layout.addWidget(QtWidgets.QLabel("目标盘"), 0, 0)
-        options_layout.addWidget(self.drive_combo, 0, 1)
-        options_layout.addWidget(self.btn_refresh_drives, 0, 2)
-
-        self.source_type_combo = QtWidgets.QComboBox()
-        self.source_type_combo.setEditable(True)
-        self.source_type_combo.addItems(DEFAULT_SOURCE_TYPES)
-        options_layout.addWidget(QtWidgets.QLabel("来源类型"), 1, 0)
-        options_layout.addWidget(self.source_type_combo, 1, 1, 1, 2)
-
-        self.time_group = QtWidgets.QButtonGroup(self)
-        self.rb_mtime = QtWidgets.QRadioButton("按修改时间")
-        self.rb_ctime = QtWidgets.QRadioButton("按创建时间")
-        self.rb_exif = QtWidgets.QRadioButton("按 EXIF（缺失则用修改时间）")
-        self.rb_mtime.setChecked(True)
-        self.time_group.addButton(self.rb_mtime)
-        self.time_group.addButton(self.rb_ctime)
-        self.time_group.addButton(self.rb_exif)
-
-        time_box = QtWidgets.QHBoxLayout()
-        time_box.addWidget(self.rb_mtime)
-        time_box.addWidget(self.rb_ctime)
-        time_box.addWidget(self.rb_exif)
-        time_box.addStretch(1)
-
-        options_layout.addWidget(QtWidgets.QLabel("归类规则"), 2, 0)
-        options_layout.addLayout(time_box, 2, 1, 1, 2)
-
-        self.mode_group = QtWidgets.QButtonGroup(self)
-        self.rb_plain = QtWidgets.QRadioButton("明文复制")
-        self.rb_encrypted = QtWidgets.QRadioButton("加密归档")
-        self.rb_plain.setChecked(True)
-        self.mode_group.addButton(self.rb_plain)
-        self.mode_group.addButton(self.rb_encrypted)
-
-        mode_box = QtWidgets.QHBoxLayout()
-        mode_box.addWidget(self.rb_plain)
-        mode_box.addWidget(self.rb_encrypted)
-        mode_box.addStretch(1)
-
-        options_layout.addWidget(QtWidgets.QLabel("模式"), 3, 0)
-        options_layout.addLayout(mode_box, 3, 1, 1, 2)
-
-        # 加密设置
-        self.encrypt_group = QtWidgets.QGroupBox("加密设置")
-        encrypt_layout = QtWidgets.QGridLayout(self.encrypt_group)
-
-        self.password_input = QtWidgets.QLineEdit()
-        self.password_input.setEchoMode(QtWidgets.QLineEdit.Password)
-        self.chk_show_password = QtWidgets.QCheckBox("显示")
-        self.archive_name_input = QtWidgets.QLineEdit()
-        self.archive_name_input.setPlaceholderText("可选，例如 2025-08__素材.7z")
-        self.chk_rr = QtWidgets.QCheckBox("生成 PAR2 冗余文件 (5%)")
-        self.chk_rr.setChecked(True)
-
-        self.seven_zip_edit = QtWidgets.QLineEdit()
-        self.seven_zip_edit.setReadOnly(True)
-        self.seven_zip_edit.setText(self.seven_zip_path or "未找到")
-        self.btn_browse_7z = QtWidgets.QPushButton("选择 7z.exe")
-
-        encrypt_layout.addWidget(QtWidgets.QLabel("密码"), 0, 0)
-        encrypt_layout.addWidget(self.password_input, 0, 1)
-        encrypt_layout.addWidget(self.chk_show_password, 0, 2)
-        encrypt_layout.addWidget(QtWidgets.QLabel("归档文件名"), 1, 0)
-        encrypt_layout.addWidget(self.archive_name_input, 1, 1, 1, 2)
-        encrypt_layout.addWidget(self.chk_rr, 2, 1)
-        encrypt_layout.addWidget(QtWidgets.QLabel("7z 路径"), 3, 0)
-        encrypt_layout.addWidget(self.seven_zip_edit, 3, 1)
-        encrypt_layout.addWidget(self.btn_browse_7z, 3, 2)
-
-        # README
-        self.readme_group = QtWidgets.QGroupBox("README")
-        readme_layout = QtWidgets.QVBoxLayout(self.readme_group)
-        self.readme_input = QtWidgets.QPlainTextEdit()
-        self.readme_input.setPlaceholderText("可选：写入说明到目标目录的 README.txt")
-        readme_layout.addWidget(self.readme_input)
-
-        # 操作
-        actions_group = QtWidgets.QGroupBox("操作")
-        actions_layout = QtWidgets.QHBoxLayout(actions_group)
-        self.btn_preview = QtWidgets.QPushButton("预览")
-        self.btn_start = QtWidgets.QPushButton("开始执行")
-        self.btn_view_log = QtWidgets.QPushButton("查看日志")
-        self.btn_verify = QtWidgets.QPushButton("校验验证")
-        actions_layout.addWidget(self.btn_preview)
-        actions_layout.addWidget(self.btn_start)
-        actions_layout.addWidget(self.btn_view_log)
-        actions_layout.addWidget(self.btn_verify)
-        actions_layout.addStretch(1)
-
-        # 进度
-        progress_group = QtWidgets.QGroupBox("进度")
-        progress_layout = QtWidgets.QVBoxLayout(progress_group)
-        self.progress_bar = QtWidgets.QProgressBar()
-        self.status_label = QtWidgets.QLabel("空闲")
-        self.eta_label = QtWidgets.QLabel("剩余时间: --")
-        progress_layout.addWidget(self.progress_bar)
-        progress_layout.addWidget(self.status_label)
-        progress_layout.addWidget(self.eta_label)
-
-        layout.addWidget(source_group)
-        layout.addWidget(options_group)
-        layout.addWidget(self.encrypt_group)
-        layout.addWidget(self.readme_group)
-        layout.addWidget(actions_group)
-        layout.addWidget(progress_group)
+        layout.addWidget(self.source_section)
+        layout.addWidget(self.options_section)
+        layout.addWidget(self.encrypt_section)
+        layout.addWidget(self.readme_section)
+        layout.addWidget(self.actions_section)
+        layout.addWidget(self.progress_section)
 
         # 信号
         self.btn_add_files.clicked.connect(self._on_add_files)
@@ -409,7 +165,7 @@ class MainWindow(QtWidgets.QMainWindow):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "选择 7z.exe", filter="7z.exe (7z.exe)")
         if path:
             self.seven_zip_path = path
-            self.seven_zip_edit.setText(path)
+            self.encrypt_section.set_seven_zip_path(path)
 
     def _collect_job(self):
         source_paths = self.get_source_paths()
