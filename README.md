@@ -1,72 +1,76 @@
-# 离线备份助手
+﻿
 
-面向 Windows 10/11 的离线备份整理工具，支持把手机/相机/录屏等素材按年月归档到外接硬盘，提供明文复制或加密 7z 归档两种模式，并带有校验与日志记录功能。
+# Data Backup Tools
 
-## 功能特性
-- 按文件时间自动归类到 `YYYY/MM`（支持修改时间/创建时间/EXIF）
-- 明文复制或加密 7z 归档（AES-256，`-mhe=on`，`-mx=9`）
-- 每月一个归档文件，自动生成 SHA256 校验文件
-- 可选生成 PAR2 冗余文件（5%）
-- 预览分组统计、进度与预计剩余时间提示
-- 统一日志写入 `BACKUP/_INDEX/BACKUP_LOG.csv`
+An offline backup organizer for Windows 10/11. It helps archive camera/phone/screen-recording materials to external drives by year and month. It supports plain copy or encrypted 7z archives with verification and logs for long-term offline storage.
 
-## 目录结构
-目标盘会自动创建如下结构：
+## What it does
+- Auto groups files into `YYYY/MM` by file time (mtime/ctime/EXIF, EXIF falls back to mtime)
+- Plain copy or encrypted 7z archive (AES-256, `-mhe=on`, `-mx=9`)
+- One archive per month with SHA256 checksum generation
+- Optional PAR2 redundancy files (default 5%)
+- Preview grouping stats, progress, and ETA
+- Unified log `BACKUP/_INDEX/BACKUP_LOG.csv` plus detailed logs
+- Skips already-backed-up identical files in plain mode
+
+Typical uses:
+- Offline archiving for photo/video materials
+- External drive organization and long-term preservation
+- Encrypted offline backups with integrity verification
+
+## Directory structure
+The target drive will contain:
+
 ```
-<目标盘>\BACKUP\
+<TargetDrive>\BACKUP\
   └─<YYYY>\
      └─<MM>\
         ├─<SourceType>\
         └─ENCRYPTED\
 ```
 
-- 明文模式：文件复制到 `<SourceType>` 目录下
-- 加密模式：归档文件直接放在 `ENCRYPTED` 目录下
+- Plain mode: files are copied into `<SourceType>`
+- Encrypted mode: archives go into `ENCRYPTED`
 
-## 依赖与环境
-- Python 3.10+（建议 3.12）
-- 依赖库：
-  - PySide6
-  - Pillow
-- 加密模式需要安装 7-Zip（`7z.exe`），程序会自动尝试在常见路径下查找
-- PAR2 生成使用本仓库自带 `par2.exe`
+## Requirements
+- Python 3.10+ (3.12 recommended)
+- Dependencies: PySide6, Pillow
+- Encrypted mode requires 7-Zip (`7z.exe`), auto-detected if installed
+- PAR2 uses the bundled `par2.exe`
 
-安装依赖：
+Install dependencies:
 ```bash
 pip install PySide6 Pillow
 ```
 
-## 运行
+## Run
 ```bash
 python main.py
 ```
 
-## 使用流程
-1. 添加源文件或文件夹（支持拖拽）
-2. 选择目标盘与来源类型（可自定义）
-3. 选择归类规则（修改时间/创建时间/EXIF）
-4. 选择模式：明文复制或加密归档
-5. 加密模式下填写密码并确认 7z.exe 路径
-6. 预览分组统计后开始执行
+## Usage
+1. Add files or folders (drag & drop supported)
+2. Choose target drive and source type (editable)
+3. Choose time basis (mtime/ctime/EXIF)
+4. Choose mode: plain copy or encrypted archive
+5. In encrypted mode, enter password and confirm 7z.exe path
+6. Preview grouping stats, then start
 
-完成后可使用“校验验证”重新计算 SHA256 并比对结果。
+After completion, use “Verify” to recompute SHA256 and compare results.
 
-## 日志
-日志位于：
-```
-<目标盘>\BACKUP\_INDEX\BACKUP_LOG.csv
-```
+## Logs
+- Main log: `<TargetDrive>\BACKUP\_INDEX\BACKUP_LOG.csv`
+- Detail logs: `<TargetDrive>\BACKUP\Logs\BACKUP_DETAIL_*.log`
 
-字段包含时间戳、任务 ID、源路径、目标盘、年月、来源类型、模式、归档名、大小、SHA256 等。
+Fields include timestamp, job ID, source path, target drive, year/month, source type, mode, archive name, size, SHA256, and notes.
 
-## 配置说明
-可在 `core/config.py` 中调整：
-- 目录名与归档命名规则
-- 默认来源类型
-- 日志字段定义
-- 模式与时间规则常量
+## Configuration
+Edit `core/config.py` to change:
+- Directory and archive naming rules
+- Default source types
+- Log field definitions
+- Mode and time-basis constants
 
-## 已知说明
-- PAR2 仅在加密模式下可选生成（5%），用于增强归档容错性
-- 7-Zip 由系统安装提供，未找到时需要手动选择
-
+## Notes
+- PAR2 is optional and only available in encrypted mode (5%) to improve archive resilience
+- 7-Zip is provided by the system; if not found, select `7z.exe` manually
