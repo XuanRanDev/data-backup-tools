@@ -91,6 +91,8 @@ class BackupWorker(QtCore.QObject):
                         job_id,
                         start_ts,
                         "",
+                        job.source_paths,
+                        [it.rel_path for it in group_items],
                         job.source_type,
                         MODE_PLAIN,
                     )
@@ -168,6 +170,8 @@ class BackupWorker(QtCore.QObject):
                         job_id,
                         start_ts,
                         archive_path.name,
+                        job.source_paths,
+                        [it.rel_path for it in group_items],
                         job.source_type,
                         MODE_ENCRYPTED,
                     )

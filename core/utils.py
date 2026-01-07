@@ -405,6 +405,8 @@ def write_readme(
     job_id: str,
     timestamp: str,
     archive_name: str,
+    source_paths,
+    file_names,
     source_type: str,
     mode: str,
 ):
@@ -414,12 +416,20 @@ def write_readme(
     target_dir.mkdir(parents=True, exist_ok=True)
     readme_path = target_dir / "README.txt"
     archive_part = archive_name or "-"
-    header = (
-        f"[{timestamp}] job_id={job_id} mode={mode} source_type={source_type} "
-        f"archive={archive_part}"
-    )
+    header_lines = [
+        "=== BACKUP ENTRY ===",
+        f"timestamp: {timestamp}",
+        f"job_id: {job_id}",
+        f"mode: {mode}",
+        f"source_paths: {';'.join(source_paths)}",
+        f"file_names: {';'.join(file_names)}",
+        f"source_type: {source_type}",
+        f"archive: {archive_part}",
+    ]
     with readme_path.open("a", encoding="utf-8") as f:
         if readme_path.stat().st_size > 0:
             f.write("\n\n")
-        f.write(header + "\n")
+        f.write("\n".join(header_lines) + "\n")
+        f.write("--- MESSAGE ---\n")
         f.write(content + "\n")
+        f.write("=== END ===\n")

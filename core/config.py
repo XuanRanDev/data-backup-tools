@@ -10,7 +10,7 @@ PAR2_DIRNAME = "_PAR2"
 
 ARCHIVE_NAME_PATTERN = "{yyyy}-{mm:02d}__{source_type}__{job_id}.7z"
 
-DEFAULT_SOURCE_TYPES = ["相机", "屏幕录制", "手机", "下载", "其他"]
+DEFAULT_SOURCE_TYPES = ["相机", "屏幕录制", "手机", "下载", "Insta360", "其他"]
 
 LOG_FIELDS = [
     "timestamp",
