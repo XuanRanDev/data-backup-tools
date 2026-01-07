@@ -9,6 +9,7 @@ from core.config import (
     CHECKSUM_DIRNAME,
     ENCRYPTED_DIRNAME,
     MODE_ENCRYPTED,
+    MODE_MOVE,
     MODE_PLAIN,
     PAR2_DIRNAME,
     SHA256_EXT,
@@ -33,6 +34,7 @@ from core.utils import (
     write_sha256_file_to_dir,
     build_archive_name,
     copy_file_with_progress,
+    move_file_with_progress,
     move_par2_files,
     write_readme,
     is_same_file,
@@ -73,6 +75,7 @@ class BackupWorker(QtCore.QObject):
             total_copied = 0
             total_skipped = 0
             total_archived = 0
+            total_moved = 0
 
             for (yyyy, mm), group_items in sorted(groups.items()):
                 notes_parts = []
@@ -83,7 +86,7 @@ class BackupWorker(QtCore.QObject):
                     f"[{start_ts}] GROUP {yyyy}-{mm:02d} items={len(group_items)}",
                 )
 
-                if job.mode == MODE_PLAIN:
+                if job.mode in (MODE_PLAIN, MODE_MOVE):
                     target_dir = backup_root / f"{yyyy}" / f"{mm:02d}" / job.source_type
                     write_readme(
                         target_dir,
@@ -94,11 +97,12 @@ class BackupWorker(QtCore.QObject):
                         job.source_paths,
                         [it.rel_path for it in group_items],
                         job.source_type,
-                        MODE_PLAIN,
+                        job.mode,
                     )
                     copied_bytes = 0
                     skipped_count = 0
                     copied_count = 0
+                    moved_count = 0
                     for it in group_items:
                         base_dest = target_dir / it.rel_path
                         if base_dest.exists() and is_same_file(it.path, base_dest):
@@ -118,17 +122,28 @@ class BackupWorker(QtCore.QObject):
                             done_bytes += chunk
                             self.progress.emit(done_bytes, total_bytes, str(it.path))
 
-                        copy_file_with_progress(it.path, dest, progress_cb=on_progress)
+                        if job.mode == MODE_MOVE:
+                            move_file_with_progress(it.path, dest, progress_cb=on_progress)
+                            moved_count += 1
+                            total_moved += 1
+                            action = "MOVE"
+                        else:
+                            copy_file_with_progress(it.path, dest, progress_cb=on_progress)
+                            copied_count += 1
+                            total_copied += 1
+                            action = "COPY"
                         copied_bytes += it.size
-                        copied_count += 1
-                        total_copied += 1
                         append_detail_log(
                             log_path,
-                            f"COPY\t{it.path}\t=>\t{dest}",
+                            f"{action}\t{it.path}\t=>\t{dest}",
                         )
 
                     if skipped_count:
                         notes_parts.append(f"skip_existing={skipped_count}")
+                    if moved_count:
+                        notes_parts.append(f"moved_files={moved_count}")
+                    if copied_count:
+                        notes_parts.append(f"copied_files={copied_count}")
                     notes = ";".join(notes_parts)
                     size_bytes = copied_bytes
                     append_log_row(
@@ -141,7 +156,7 @@ class BackupWorker(QtCore.QObject):
                             "yyyy": yyyy,
                             "mm": mm,
                             "source_type": job.source_type,
-                            "mode": MODE_PLAIN,
+                            "mode": job.mode,
                             "archive_name": "",
                             "size_bytes": size_bytes,
                             "sha256": "",
@@ -150,7 +165,7 @@ class BackupWorker(QtCore.QObject):
                     )
                     append_detail_log(
                         log_path,
-                        f"GROUP_DONE {yyyy}-{mm:02d} copied_files={copied_count} copied_bytes={copied_bytes} skipped_files={skipped_count}",
+                        f"GROUP_DONE {yyyy}-{mm:02d} copied_files={copied_count} moved_files={moved_count} copied_bytes={copied_bytes} skipped_files={skipped_count}",
                     )
                 else:
                     notes = ";".join(notes_parts)
@@ -235,7 +250,7 @@ class BackupWorker(QtCore.QObject):
             end_ts = dt.datetime.now().isoformat(timespec="seconds")
             append_detail_log(
                 log_path,
-                f"[{end_ts}] END status=success copied={total_copied} skipped={total_skipped} archived_items={total_archived}",
+                f"[{end_ts}] END status=success copied={total_copied} moved={total_moved} skipped={total_skipped} archived_items={total_archived}",
             )
             self.finished.emit(True, "备份完成。")
         except Exception as exc:

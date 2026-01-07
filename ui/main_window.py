@@ -11,6 +11,7 @@ from core.config import (
     INDEX_DIRNAME,
     LOG_FILENAME,
     MODE_ENCRYPTED,
+    MODE_MOVE,
     MODE_PLAIN,
     TIME_BASIS_CTIME,
     TIME_BASIS_EXIF,
@@ -77,6 +78,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rb_exif = self.options_section.rb_exif
         self.mode_group = self.options_section.mode_group
         self.rb_plain = self.options_section.rb_plain
+        self.rb_move = self.options_section.rb_move
         self.rb_encrypted = self.options_section.rb_encrypted
 
         self.encrypt_group = self.encrypt_section
@@ -129,6 +131,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_browse_7z.clicked.connect(self._on_browse_7z)
         self.chk_show_password.toggled.connect(self._toggle_password)
         self.rb_plain.toggled.connect(self._apply_mode_visibility)
+        self.rb_move.toggled.connect(self._apply_mode_visibility)
         self.rb_encrypted.toggled.connect(self._apply_mode_visibility)
         self.btn_preview.clicked.connect(self._on_preview)
         self.btn_start.clicked.connect(self._on_start)
@@ -196,7 +199,12 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             time_basis = TIME_BASIS_EXIF
 
-        mode = MODE_PLAIN if self.rb_plain.isChecked() else MODE_ENCRYPTED
+        if self.rb_plain.isChecked():
+            mode = MODE_PLAIN
+        elif self.rb_move.isChecked():
+            mode = MODE_MOVE
+        else:
+            mode = MODE_ENCRYPTED
         password = self.password_input.text()
         rr_enabled = self.chk_rr.isChecked()
         archive_name = self.archive_name_input.text().strip()

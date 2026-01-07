@@ -294,6 +294,14 @@ def copy_file_with_progress(src: Path, dst: Path, progress_cb=None):
     shutil.copystat(src, dst, follow_symlinks=True)
 
 
+def move_file_with_progress(src: Path, dst: Path, progress_cb=None):
+    copy_file_with_progress(src, dst, progress_cb=progress_cb)
+    try:
+        src.unlink()
+    except Exception as exc:
+        raise RuntimeError(f"移动失败，无法删除源文件: {src}") from exc
+
+
 def build_archive_name(yyyy: int, mm: int, source_type: str, job_id: str):
     safe_type = "".join(c for c in source_type if c.isalnum() or c in "-_ ").strip()
     safe_type = safe_type.replace(" ", "_") or "其他"

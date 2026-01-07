@@ -32,6 +32,7 @@ TIME_BASIS_CTIME = "ctime"
 TIME_BASIS_EXIF = "exif"
 
 MODE_PLAIN = "plain"
+MODE_MOVE = "move"
 MODE_ENCRYPTED = "encrypted"
 
 SHA256_EXT = ".sha256"

@@ -62,13 +62,16 @@ class OptionsSection(QtWidgets.QGroupBox):
 
         self.mode_group = QtWidgets.QButtonGroup(self)
         self.rb_plain = QtWidgets.QRadioButton("明文复制")
+        self.rb_move = QtWidgets.QRadioButton("明文移动")
         self.rb_encrypted = QtWidgets.QRadioButton("加密归档")
         self.rb_plain.setChecked(True)
         self.mode_group.addButton(self.rb_plain)
+        self.mode_group.addButton(self.rb_move)
         self.mode_group.addButton(self.rb_encrypted)
 
         mode_box = QtWidgets.QHBoxLayout()
         mode_box.addWidget(self.rb_plain)
+        mode_box.addWidget(self.rb_move)
         mode_box.addWidget(self.rb_encrypted)
         mode_box.addStretch(1)
 
