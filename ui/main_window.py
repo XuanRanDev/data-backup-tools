@@ -34,6 +34,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle("离线备份助手")
         self.resize(1000, 700)
+        self._apply_style()
 
         self.seven_zip_path = find_7z_exe()
         self.worker_thread = None
@@ -41,6 +42,179 @@ class MainWindow(QtWidgets.QMainWindow):
         self._build_ui()
         self._refresh_drives()
         self._apply_mode_visibility()
+
+    def _apply_style(self):
+        """Apply app-wide stylesheet."""
+        self.setStyleSheet("""
+            /* 全局设定 */
+            * {
+                font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", sans-serif;
+                font-size: 10pt;
+                outline: none; /* 去掉原本丑陋的虚线框 */
+            }
+
+            /* 主窗口背景 */
+            QMainWindow {
+                background: #fdfdfd;
+            }
+
+            /* 文本标签 */
+            QLabel {
+                color: #333333;
+                font-weight: 500;
+            }
+
+            /* GroupBox 容器 */
+            QGroupBox {
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                margin-top: 24px; /* 为标题留出空间 */
+                background-color: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px;
+                color: #555555;
+                font-weight: bold;
+                font-size: 10.5pt;
+                left: 10px; /* 标题稍微右移 */
+            }
+
+            /* 输入框、文本域、下拉框 */
+            QLineEdit, QPlainTextEdit, QComboBox, QDateEdit, QSpinBox {
+                background: #ffffff;
+                border: 1px solid #d1d5db; /* 浅灰边框 */
+                border-radius: 6px;
+                padding: 5px 10px;
+                color: #1f2937;
+                selection-background-color: #3b82f6; /* 选中色：蓝色 */
+                selection-color: #ffffff;
+            }
+
+            /* 输入框悬停与聚焦状态 - 增加交互感 */
+            QLineEdit:hover, QPlainTextEdit:hover, QComboBox:hover {
+                border: 1px solid #9ca3af;
+            }
+            QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus {
+                border: 1px solid #3b82f6; /* 聚焦变为蓝色 */
+                background: #feffff;
+            }
+
+            /* 下拉框特殊样式 */
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+                margin-right: 5px;
+            }
+            QComboBox::down-arrow {
+                /* 你可以使用图片，或者这里简单的用字符/颜色模拟 */
+                image: none;
+                border-left: 2px solid #6b7280;
+                border-bottom: 2px solid #6b7280;
+                width: 6px;
+                height: 6px;
+                transform: rotate(-45deg); /* 简单的箭头模拟 */
+            }
+            QComboBox QAbstractItemView {
+                background: #ffffff;
+                border: 1px solid #e5e7eb;
+                outline: none;
+                padding: 4px;
+            }
+            QComboBox QAbstractItemView::item {
+                padding: 5px;
+                border-radius: 4px;
+            }
+            QComboBox QAbstractItemView::item:selected {
+                background: #eff6ff;
+                color: #1d4ed8;
+            }
+
+            /* 按钮 */
+            QPushButton {
+                background: #3b82f6; /* 鲜艳的蓝 */
+                color: #ffffff;
+                border: 1px solid #2563eb;
+                border-radius: 6px;
+                padding: 6px 16px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background: #2563eb;
+            }
+            QPushButton:pressed {
+                background: #1d4ed8;
+                padding-left: 17px; /* 按下时的微动效 */
+                padding-top: 7px;
+            }
+            QPushButton:disabled {
+                background: #e5e7eb;
+                color: #9ca3af;
+                border: 1px solid #d1d5db;
+            }
+
+            /* 单选框与复选框 */
+            QRadioButton, QCheckBox {
+                spacing: 8px;
+                color: #374151;
+            }
+            QRadioButton::indicator, QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+            }
+
+            /* 表格 */
+            QTableWidget {
+                background-color: #ffffff;
+                alternate-background-color: #f9fafb; /* 隔行变色 */
+                border: 1px solid #e5e7eb;
+                gridline-color: #f3f4f6;
+                selection-background-color: #eff6ff;
+                selection-color: #1e40af;
+            }
+            QHeaderView::section {
+                background-color: #f3f4f6;
+                padding: 6px;
+                border: none;
+                border-bottom: 1px solid #e5e7eb;
+                font-weight: 600;
+                color: #4b5563;
+            }
+
+            /* 进度条 */
+            QProgressBar {
+                border: none;
+                background: #e5e7eb;
+                border-radius: 4px;
+                text-align: center;
+                color: transparent; /* 隐藏文字，如果需要显示文字删掉这行 */
+                height: 8px;
+            }
+            QProgressBar::chunk {
+                background: #10b981; /* 绿色 */
+                border-radius: 4px;
+            }
+
+            /* 滚动条美化 (重要！原生的太丑) */
+            QScrollBar:vertical {
+                border: none;
+                background: #f3f4f6;
+                width: 10px;
+                margin: 0px 0px 0px 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #d1d5db;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #9ca3af;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
 
     def _build_ui(self):
         central = QtWidgets.QWidget()
