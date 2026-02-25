@@ -115,7 +115,7 @@ def test_skip_existing_file_plain(tmp_path: Path):
     assert row and row[0] >= 1
 
 
-def test_log_csv_written(tmp_path: Path):
+def test_logs_and_db_written_without_csv(tmp_path: Path):
     source_dir = tmp_path / "source"
     mtime = dt.datetime(2024, 7, 1, 10, 0, 0)
     _write_file(source_dir / "a.txt", "a", mtime)
@@ -125,11 +125,20 @@ def test_log_csv_written(tmp_path: Path):
     worker = workers.BackupWorker(job)
     worker.run()
 
-    log_path = target_drive / "BACKUP" / "_INDEX" / "BACKUP_LOG.csv"
-    assert log_path.exists()
-    content = log_path.read_text(encoding="utf-8")
-    assert "job-log" in content
-    assert "mode" in content
+    csv_path = target_drive / "BACKUP" / "_INDEX" / "BACKUP_LOG.csv"
+    assert not csv_path.exists()
+
+    db_path = target_drive / "BACKUP" / "_INDEX" / "BACKUP_STATE.db"
+    assert db_path.exists()
+    conn = sqlite3.connect(db_path)
+    task = conn.execute("SELECT job_id, mode FROM backup_tasks WHERE job_id = ?", ("job-log",)).fetchone()
+    comment = conn.execute(
+        "SELECT comment FROM schema_comments WHERE table_name = ? AND column_name = ?",
+        ("backup_tasks", "mode"),
+    ).fetchone()
+    conn.close()
+    assert task and task[0] == "job-log" and task[1] == MODE_PLAIN
+    assert comment and "备份模式" in comment[0]
 
 
 def test_backup_worker_move(tmp_path: Path):

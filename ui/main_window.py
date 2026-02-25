@@ -8,8 +8,6 @@ from PySide6 import QtCore, QtWidgets
 
 from core.config import (
     BACKUP_ROOT_NAME,
-    INDEX_DIRNAME,
-    LOG_FILENAME,
     MODE_ENCRYPTED,
     MODE_MOVE,
     MODE_PLAIN,
@@ -341,10 +339,10 @@ class MainWindow(QtWidgets.QMainWindow):
             drive = self.drive_combo.currentText()
             if not drive:
                 raise RuntimeError("请选择目标盘。")
-            log_path = Path(drive) / BACKUP_ROOT_NAME / INDEX_DIRNAME / LOG_FILENAME
-            if not log_path.exists():
-                raise RuntimeError("未找到日志文件。")
-            os.startfile(str(log_path))
+            logs_dir = Path(drive) / BACKUP_ROOT_NAME / "Logs"
+            if not logs_dir.exists():
+                raise RuntimeError("未找到日志目录。")
+            os.startfile(str(logs_dir))
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "查看日志", str(exc))
 

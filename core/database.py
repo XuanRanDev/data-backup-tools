@@ -80,9 +80,72 @@ class BackupDatabase:
                 ON task_file_records(status);
             CREATE INDEX IF NOT EXISTS idx_task_file_records_asset_id
                 ON task_file_records(asset_id);
+
+            CREATE TABLE IF NOT EXISTS schema_comments (
+                table_name TEXT NOT NULL,
+                column_name TEXT NOT NULL,
+                comment TEXT NOT NULL,
+                PRIMARY KEY (table_name, column_name)
+            );
             """
         )
+        self._init_schema_comments()
         self.conn.commit()
+
+    def _init_schema_comments(self):
+        comments = [
+            ("backup_tasks", "id", "备份任务主键"),
+            ("backup_tasks", "job_id", "任务唯一标识，来自程序运行实例"),
+            ("backup_tasks", "start_time", "任务开始时间（ISO8601）"),
+            ("backup_tasks", "end_time", "任务结束时间（ISO8601）"),
+            ("backup_tasks", "status", "任务状态：running/success/partial_success/failed"),
+            ("backup_tasks", "source_paths", "本次任务来源路径列表，分号分隔"),
+            ("backup_tasks", "target_drive", "目标盘符"),
+            ("backup_tasks", "source_type", "来源类型，如相机/手机"),
+            ("backup_tasks", "time_basis", "归类时间依据：mtime/ctime/exif"),
+            ("backup_tasks", "mode", "备份模式：plain/move/encrypted"),
+            ("backup_tasks", "scanned_files", "扫描到的文件总数"),
+            ("backup_tasks", "new_files", "新增入备份的文件数"),
+            ("backup_tasks", "skipped_files", "因去重跳过的文件数"),
+            ("backup_tasks", "failed_files", "失败文件数"),
+            ("backup_tasks", "retried_files", "命中失败重试逻辑的文件数"),
+            ("file_assets", "id", "文件资产主键"),
+            ("file_assets", "hash_type", "哈希算法类型（当前为 sha256）"),
+            ("file_assets", "file_hash", "文件内容哈希，资产唯一键"),
+            ("file_assets", "size_bytes", "文件大小（字节）"),
+            ("file_assets", "capture_time", "拍摄/创建时间（ISO8601）"),
+            ("file_assets", "media_type", "媒体类型：image/video/other"),
+            ("file_assets", "device_info", "设备信息（如相机厂商/型号）"),
+            ("file_assets", "video_time_source", "视频时间来源（ffprobe解析结果）"),
+            ("file_assets", "first_source_path", "首次扫描到该资产的源路径"),
+            ("file_assets", "last_source_path", "最近一次扫描到该资产的源路径"),
+            ("file_assets", "first_seen_at", "资产首次入库时间（ISO8601）"),
+            ("file_assets", "last_seen_at", "资产最近一次更新入库时间（ISO8601）"),
+            ("task_file_records", "id", "任务文件记录主键"),
+            ("task_file_records", "task_id", "所属备份任务ID"),
+            ("task_file_records", "asset_id", "关联文件资产ID，可为空"),
+            ("task_file_records", "source_path", "文件源路径"),
+            ("task_file_records", "rel_path", "相对来源路径"),
+            ("task_file_records", "target_path", "目标路径（明文目标或归档路径）"),
+            ("task_file_records", "yyyy", "归档年份"),
+            ("task_file_records", "mm", "归档月份"),
+            ("task_file_records", "status", "文件状态：scanned/copied/moved/archived/skipped_duplicate/failed"),
+            ("task_file_records", "error_type", "异常类型"),
+            ("task_file_records", "error_message", "异常信息"),
+            ("task_file_records", "retry_count", "该文件历史失败后重试次数"),
+            ("task_file_records", "is_exception", "是否标记为异常记录（0/1）"),
+            ("task_file_records", "metadata_json", "扩展元数据JSON"),
+            ("task_file_records", "created_at", "记录创建时间（ISO8601）"),
+            ("task_file_records", "updated_at", "记录更新时间（ISO8601）"),
+        ]
+        self.conn.executemany(
+            """
+            INSERT INTO schema_comments (table_name, column_name, comment)
+            VALUES (?, ?, ?)
+            ON CONFLICT(table_name, column_name) DO UPDATE SET comment = excluded.comment
+            """,
+            comments,
+        )
 
     def create_task(self, job, start_ts: str, scanned_files: int) -> int:
         cur = self.conn.execute(

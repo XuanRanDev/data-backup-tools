@@ -1,9 +1,6 @@
 """结构化日志服务。"""
-import csv
 import json
 from pathlib import Path
-
-from core.config import INDEX_DIRNAME, LOG_FIELDS, LOG_FILENAME
 
 
 class JobLogger:
@@ -29,15 +26,3 @@ class JobLogger:
         row = {"event": event, **fields}
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
-
-
-def append_main_log_row(backup_root: Path, row: dict):
-    index_dir = backup_root / INDEX_DIRNAME
-    index_dir.mkdir(parents=True, exist_ok=True)
-    log_path = index_dir / LOG_FILENAME
-    is_new = not log_path.exists()
-    with log_path.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=LOG_FIELDS)
-        if is_new:
-            writer.writeheader()
-        writer.writerow(row)

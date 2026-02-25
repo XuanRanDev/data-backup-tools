@@ -14,7 +14,7 @@ from core.config import (
     SHA256_EXT,
 )
 from core.database import BackupDatabase
-from core.logging_service import JobLogger, append_main_log_row
+from core.logging_service import JobLogger
 from core.models import BackupJob
 from core.utils import (
     build_archive_name,
@@ -63,6 +63,13 @@ class BackupWorker(QtCore.QObject):
             start_dt = dt.datetime.now()
             start_ts = start_dt.isoformat(timespec="seconds")
             logger = JobLogger(backup_root, job.job_id, start_ts)
+            legacy_csv = backup_root / "_INDEX" / "BACKUP_LOG.csv"
+            if legacy_csv.exists():
+                try:
+                    legacy_csv.unlink()
+                    logger.system("LEGACY_CSV_REMOVED", path=str(legacy_csv))
+                except Exception:
+                    logger.error("LEGACY_CSV_REMOVE_FAILED", path=str(legacy_csv))
             db = BackupDatabase(build_db_path(backup_root))
             task_id = db.create_task(job, start_ts, len(items))
 
@@ -94,9 +101,7 @@ class BackupWorker(QtCore.QObject):
             )
 
             for (yyyy, mm), group_items in sorted(groups.items()):
-                notes_parts = []
-                if notes_count.get((yyyy, mm)):
-                    notes_parts.append(f"metadata_fallback_count={notes_count[(yyyy, mm)]}")
+                metadata_fallback_count = notes_count.get((yyyy, mm), 0)
                 if job.mode in (MODE_PLAIN, MODE_MOVE):
                     self._process_plain_or_move_group(
                         db,
@@ -106,7 +111,7 @@ class BackupWorker(QtCore.QObject):
                         yyyy,
                         mm,
                         group_items,
-                        notes_parts,
+                        metadata_fallback_count,
                         session_success_hashes,
                         stats,
                         total_bytes,
@@ -122,7 +127,7 @@ class BackupWorker(QtCore.QObject):
                         yyyy,
                         mm,
                         group_items,
-                        notes_parts,
+                        metadata_fallback_count,
                         session_success_hashes,
                         stats,
                         par2_exe,
@@ -203,7 +208,7 @@ class BackupWorker(QtCore.QObject):
         yyyy,
         mm,
         group_items,
-        notes_parts,
+        metadata_fallback_count,
         session_success_hashes,
         stats,
         total_bytes,
@@ -311,27 +316,15 @@ class BackupWorker(QtCore.QObject):
                     error_message=str(exc),
                 )
 
-        if copied_count:
-            notes_parts.append(f"copied_files={copied_count}")
-        if moved_count:
-            notes_parts.append(f"moved_files={moved_count}")
-        notes = ";".join(notes_parts)
-        append_main_log_row(
-            backup_root,
-            {
-                "timestamp": dt.datetime.now().isoformat(timespec="seconds"),
-                "job_id": job.job_id,
-                "source_path": ";".join(job.source_paths),
-                "target_drive": job.target_drive,
-                "yyyy": yyyy,
-                "mm": mm,
-                "source_type": job.source_type,
-                "mode": job.mode,
-                "archive_name": "",
-                "size_bytes": copied_bytes,
-                "sha256": "",
-                "notes": notes,
-            },
+        logger.system(
+            "GROUP_DONE",
+            yyyy=yyyy,
+            mm=mm,
+            mode=job.mode,
+            copied_files=copied_count,
+            moved_files=moved_count,
+            processed_bytes=copied_bytes,
+            metadata_fallback_count=metadata_fallback_count,
         )
 
     def _process_encrypted_group(
@@ -343,7 +336,7 @@ class BackupWorker(QtCore.QObject):
         yyyy,
         mm,
         group_items,
-        notes_parts,
+        metadata_fallback_count,
         session_success_hashes,
         stats,
         par2_exe,
@@ -489,32 +482,23 @@ class BackupWorker(QtCore.QObject):
                 stats["new_files"] += 1
                 stats["archived"] += 1
 
-            if deleted_count:
-                notes_parts.append(f"deleted_files={deleted_count}")
-            notes = ";".join(notes_parts)
-            append_main_log_row(
-                backup_root,
-                {
-                    "timestamp": dt.datetime.now().isoformat(timespec="seconds"),
-                    "job_id": job.job_id,
-                    "source_path": ";".join(job.source_paths),
-                    "target_drive": job.target_drive,
-                    "yyyy": yyyy,
-                    "mm": mm,
-                    "source_type": job.source_type,
-                    "mode": MODE_ENCRYPTED,
-                    "archive_name": archive_path.name,
-                    "size_bytes": archive_path.stat().st_size,
-                    "sha256": hash_hex,
-                    "notes": notes,
-                },
-            )
             logger.operation(
                 "ARCHIVE_DONE",
                 archive_name=archive_path.name,
                 size_bytes=archive_path.stat().st_size,
                 sha256=hash_hex,
                 file_count=len(selected_items),
+            )
+            logger.system(
+                "GROUP_DONE",
+                yyyy=yyyy,
+                mm=mm,
+                mode=MODE_ENCRYPTED,
+                archived_files=len(selected_items),
+                archive_name=archive_path.name,
+                archive_size=archive_path.stat().st_size,
+                deleted_files=deleted_count,
+                metadata_fallback_count=metadata_fallback_count,
             )
         except Exception as exc:
             stats["failed_files"] += len(selected_items)
