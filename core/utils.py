@@ -1,24 +1,22 @@
-﻿"""通用工具函数。"""
-import csv
+"""通用工具函数。"""
 import datetime as dt
 import hashlib
+import json
 import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ExifTags
+from PIL import ExifTags, Image
 
 from core.config import (
     ARCHIVE_NAME_PATTERN,
     BACKUP_ROOT_NAME,
     CHUNK_SIZE,
     CHECKSUM_DIRNAME,
-    DETAIL_LOG_FILENAME,
+    DB_FILENAME,
     INDEX_DIRNAME,
-    LOG_FIELDS,
-    LOG_FILENAME,
     PAR2_DIRNAME,
     PAR2_EXE_NAME,
     SHA256_EXT,
@@ -27,6 +25,9 @@ from core.config import (
     TIME_BASIS_MTIME,
 )
 from core.models import FileItem
+
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp", ".tif", ".tiff", ".bmp"}
+VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".wmv", ".mts", ".3gp", ".webm"}
 
 
 def list_windows_drives():
@@ -71,6 +72,10 @@ def ensure_index_dir(backup_root: Path) -> Path:
     index_dir = backup_root / INDEX_DIRNAME
     index_dir.mkdir(parents=True, exist_ok=True)
     return index_dir
+
+
+def build_db_path(backup_root: Path) -> Path:
+    return ensure_index_dir(backup_root) / DB_FILENAME
 
 
 def ensure_checksum_dir(base_dir: Path) -> Path:
@@ -123,37 +128,114 @@ def parse_exif_datetime(value: str):
         return None
 
 
-def get_exif_datetime(path: Path):
+def get_exif_datetime_and_device(path: Path):
     try:
         with Image.open(path) as img:
             exif = img.getexif()
             if not exif:
-                return None
+                return None, ""
             exif_map = {ExifTags.TAGS.get(k, k): v for k, v in exif.items()}
+            make = str(exif_map.get("Make", "")).strip()
+            model = str(exif_map.get("Model", "")).strip()
+            device = " ".join([x for x in (make, model) if x]).strip()
             for key in ("DateTimeOriginal", "DateTimeDigitized", "DateTime"):
                 if key in exif_map:
-                    return parse_exif_datetime(str(exif_map[key]))
+                    return parse_exif_datetime(str(exif_map[key])), device
+            return None, device
+    except Exception:
+        return None, ""
+
+
+def _parse_video_datetime(raw: str):
+    text = (raw or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return dt.datetime.fromisoformat(text).replace(tzinfo=None)
     except Exception:
         return None
-    return None
+
+
+def get_video_datetime(path: Path):
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_entries",
+        "format_tags=creation_time:stream_tags=creation_time",
+        str(path),
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if result.returncode != 0:
+            return None, "ffprobe_failed"
+        payload = json.loads(result.stdout or "{}")
+        values = []
+        fmt = payload.get("format", {})
+        tags = fmt.get("tags", {}) if isinstance(fmt, dict) else {}
+        if tags.get("creation_time"):
+            values.append(str(tags.get("creation_time")))
+        for stream in payload.get("streams", []):
+            stags = stream.get("tags", {}) if isinstance(stream, dict) else {}
+            if stags.get("creation_time"):
+                values.append(str(stags.get("creation_time")))
+        for raw in values:
+            parsed = _parse_video_datetime(raw)
+            if parsed:
+                return parsed, "ffprobe_creation_time"
+        return None, "ffprobe_no_creation_time"
+    except FileNotFoundError:
+        return None, "ffprobe_not_found"
+    except Exception:
+        return None, "ffprobe_error"
+
+
+def detect_media_type(path: Path) -> str:
+    ext = path.suffix.lower()
+    if ext in IMAGE_EXTS:
+        return "image"
+    if ext in VIDEO_EXTS:
+        return "video"
+    return "other"
 
 
 def get_file_datetime(path: Path, basis: str):
     note = ""
+    media_type = detect_media_type(path)
+    device_info = ""
+    video_time_source = ""
+    exif_dt = None
+    video_dt = None
+
+    if media_type == "image":
+        exif_dt, device_info = get_exif_datetime_and_device(path)
+    elif media_type == "video":
+        video_dt, video_time_source = get_video_datetime(path)
+
     if basis == TIME_BASIS_MTIME:
-        return dt.datetime.fromtimestamp(path.stat().st_mtime), note
-    if basis == TIME_BASIS_CTIME:
-        return dt.datetime.fromtimestamp(path.stat().st_ctime), note
-    if basis == TIME_BASIS_EXIF:
-        exif_dt = get_exif_datetime(path)
-        if exif_dt:
-            return exif_dt, note
-        note = "exif_missing_fallback_to_mtime"
-        return dt.datetime.fromtimestamp(path.stat().st_mtime), note
-    return dt.datetime.fromtimestamp(path.stat().st_mtime), note
+        file_dt = dt.datetime.fromtimestamp(path.stat().st_mtime)
+    elif basis == TIME_BASIS_CTIME:
+        file_dt = dt.datetime.fromtimestamp(path.stat().st_ctime)
+    elif basis == TIME_BASIS_EXIF:
+        if media_type == "image" and exif_dt:
+            file_dt = exif_dt
+        elif media_type == "video" and video_dt:
+            file_dt = video_dt
+            note = video_time_source
+        else:
+            note = "metadata_missing_fallback_to_mtime"
+            file_dt = dt.datetime.fromtimestamp(path.stat().st_mtime)
+    else:
+        file_dt = dt.datetime.fromtimestamp(path.stat().st_mtime)
+
+    return file_dt, note, media_type, device_info, video_time_source
 
 
-def collect_source_items(source_paths):
+def collect_source_items(source_paths, basis=TIME_BASIS_MTIME):
     items = []
     for raw in source_paths:
         p = Path(raw)
@@ -166,6 +248,7 @@ def collect_source_items(source_paths):
                     size=p.stat().st_size,
                     source_root=p.parent,
                     rel_path=p.name,
+                    media_type=detect_media_type(p),
                 )
             )
         else:
@@ -182,8 +265,18 @@ def collect_source_items(source_paths):
                             size=full.stat().st_size,
                             source_root=p,
                             rel_path=rel,
+                            media_type=detect_media_type(full),
                         )
                     )
+
+    for item in items:
+        file_dt, note, media_type, device_info, video_time_source = get_file_datetime(item.path, basis)
+        item.capture_time = file_dt.isoformat(timespec="seconds")
+        item.capture_note = note
+        item.media_type = media_type
+        item.device_info = device_info
+        item.video_time_source = video_time_source
+
     return items
 
 
@@ -191,62 +284,16 @@ def group_items_by_month(items, basis):
     groups = {}
     notes_count = {}
     for item in items:
-        file_dt, note = get_file_datetime(item.path, basis)
+        if item.capture_time:
+            file_dt = dt.datetime.fromisoformat(item.capture_time)
+            note = item.capture_note
+        else:
+            file_dt, note, _, _, _ = get_file_datetime(item.path, basis)
         key = (file_dt.year, file_dt.month)
         groups.setdefault(key, []).append(item)
         if note:
             notes_count[key] = notes_count.get(key, 0) + 1
     return groups, notes_count
-
-
-def append_log_row(backup_root: Path, row: dict):
-    index_dir = ensure_index_dir(backup_root)
-    log_path = index_dir / LOG_FILENAME
-    is_new = not log_path.exists()
-    with log_path.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=LOG_FIELDS)
-        if is_new:
-            writer.writeheader()
-        writer.writerow(row)
-
-
-def build_detail_log_path(backup_root: Path, job_id: str, start_dt: dt.datetime) -> Path:
-    base = Path(DETAIL_LOG_FILENAME)
-    stem = base.stem or "BACKUP_DETAIL"
-    suffix = base.suffix or ".log"
-    ts = start_dt.strftime("%Y%m%d_%H%M%S")
-    name = f"{stem}_{ts}_{job_id}{suffix}"
-    return backup_root / "Logs" / name
-
-
-def append_detail_log(log_path: Path, line: str):
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("a", encoding="utf-8") as f:
-        f.write(line.rstrip("\n") + "\n")
-
-
-def write_detail_log_header(
-    log_path: Path,
-    job,
-    start_dt: dt.datetime,
-    total_files: int,
-    total_bytes: int,
-):
-    start_ts = start_dt.isoformat(timespec="seconds")
-    header_lines = [
-        f"[{start_ts}] START",
-        f"job_id={job.job_id}",
-        f"source_paths={';'.join(job.source_paths)}",
-        f"target_drive={job.target_drive}",
-        f"source_type={job.source_type}",
-        f"time_basis={job.time_basis}",
-        f"mode={job.mode}",
-        f"total_files={total_files}",
-        f"total_bytes={total_bytes}",
-        "",
-    ]
-    for line in header_lines:
-        append_detail_log(log_path, line)
 
 
 def compute_sha256(path: Path, progress_cb=None):
@@ -263,6 +310,10 @@ def compute_sha256(path: Path, progress_cb=None):
             if progress_cb:
                 progress_cb(done, total)
     return h.hexdigest()
+
+
+def compute_file_sha256(path: Path):
+    return compute_sha256(path)
 
 
 def write_sha256_file(archive_path: Path, hash_hex: str):
@@ -337,7 +388,7 @@ def create_7z_archive(
             with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tf:
                 list_file = tf.name
                 for it in root_items:
-                    tf.write(f"\"{it.rel_path}\"\n")
+                    tf.write(f'"{it.rel_path}"\n')
 
             cmd = [
                 seven_zip,
@@ -348,8 +399,6 @@ def create_7z_archive(
                 "-mhe=on",
                 f"-p{password}",
             ]
-            # if rr_enabled:
-            #     cmd.append("-rr5%")
             cmd.append(f"@{list_file}")
 
             result = subprocess.run(

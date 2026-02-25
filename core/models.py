@@ -1,6 +1,7 @@
 ﻿"""数据模型。"""
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 
 @dataclass
@@ -9,6 +10,12 @@ class FileItem:
     size: int
     source_root: Path
     rel_path: str
+    capture_time: Optional[str] = None
+    capture_note: str = ""
+    media_type: str = "other"
+    device_info: str = ""
+    sha256: str = ""
+    video_time_source: str = ""
 
 
 @dataclass

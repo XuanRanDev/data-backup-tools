@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import datetime as dt
 from pathlib import Path
 
@@ -101,10 +102,17 @@ def test_skip_existing_file_plain(tmp_path: Path):
     worker = workers.BackupWorker(job)
     worker.run()
 
-    detail_logs = list((target_drive / "BACKUP" / "Logs").glob("BACKUP_DETAIL_*.log"))
+    detail_logs = list((target_drive / "BACKUP" / "Logs" / "operation").glob("BACKUP_DETAIL_*.log"))
     assert detail_logs
     content = detail_logs[-1].read_text(encoding="utf-8")
     assert "SKIP_EXISTING" in content
+
+    db_path = target_drive / "BACKUP" / "_INDEX" / "BACKUP_STATE.db"
+    assert db_path.exists()
+    conn = sqlite3.connect(db_path)
+    row = conn.execute("SELECT skipped_files FROM backup_tasks WHERE job_id = ?", ("job-skip",)).fetchone()
+    conn.close()
+    assert row and row[0] >= 1
 
 
 def test_log_csv_written(tmp_path: Path):
@@ -193,7 +201,7 @@ def test_encrypted_archive_failure_reports_error(tmp_path: Path, monkeypatch):
     worker = workers.BackupWorker(job)
     worker.run()
 
-    detail_logs = list((target_drive / "BACKUP" / "Logs").glob("BACKUP_DETAIL_*.log"))
+    detail_logs = list((target_drive / "BACKUP" / "Logs" / "error").glob("BACKUP_ERROR_*.log"))
     assert detail_logs
     content = detail_logs[-1].read_text(encoding="utf-8")
-    assert "status=failed" in content
+    assert "ARCHIVE_FAILED" in content

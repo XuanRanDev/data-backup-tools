@@ -238,7 +238,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_preview(self):
         try:
             job = self._collect_job()
-            items = collect_source_items(job.source_paths)
+            items = collect_source_items(job.source_paths, job.time_basis)
             if not items:
                 QtWidgets.QMessageBox.warning(self, "预览", "未找到有效文件。")
                 return
